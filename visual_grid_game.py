@@ -2,7 +2,7 @@
 import random
 import tkinter as tk
 
-from agent import ModelBasedAgent
+from agent import SearchAgent
 
 
 class VisualGridHuntGame:
@@ -58,7 +58,7 @@ class VisualGridHuntGame:
         self.collision = False
 
     def get_percept(self) -> dict:
-        """Return only local sensor readings, never global grid coordinates."""
+        """Return local sensors plus the world model required for offline search."""
         direction_offsets = {
             'Up': (0, 1), 'Down': (0, -1), 'Left': (-1, 0), 'Right': (1, 0)
         }
@@ -73,6 +73,10 @@ class VisualGridHuntGame:
             'wall_ahead': wall_ahead,
             'food_here': tuple(self.agent_pos) in self.food_positions,
             'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
+            'agent_pos': tuple(self.agent_pos),
+            'grid_size': (self.width, self.height),
+            'walls': list(self.walls),
+            'all_food': list(self.food_positions),
         }
 
     def execute_action(self, action: str):
@@ -128,11 +132,11 @@ class GridGameGUI:
 
     def __init__(self, root, width=10, height=10, num_food=12, num_opponents=2, walls=None):
         self.root = root
-        self.root.title("IT3012 - Model-Based Grid Hunt")
+        self.root.title("IT3012 - Goal-Based Search Grid Hunt")
 
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       custom_walls=walls)
-        self.agent = ModelBasedAgent()
+        self.agent = SearchAgent()
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
