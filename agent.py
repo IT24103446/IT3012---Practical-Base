@@ -1,6 +1,7 @@
 # agent.py
 from collections import deque
 import heapq
+import math
 
 
 class SimpleReflexAgent:
@@ -64,6 +65,14 @@ class SearchAgent:
     def __init__(self):
         self.plan = []
         self.active_algo = 'BFS'
+
+    def manhattan_distance(self, pos, goal):
+        """Estimate 4-way grid distance by horizontal plus vertical steps."""
+        return abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
+
+    def euclidean_distance(self, pos, goal):
+        """Return the straight-line distance between two grid coordinates."""
+        return math.hypot(pos[0] - goal[0], pos[1] - goal[1])
 
     @classmethod
     def _successors(cls, position, walls, grid_size):
@@ -130,6 +139,31 @@ class SearchAgent:
                     heapq.heappush(frontier, (next_cost, tie_breaker, next_position, path + [action]))
         return None
 
+    def astar_search(self, start_pos, goal_pos, walls, grid_size, heuristic_type='manhattan'):
+        """Find a lowest-cost path using the A* evaluation f(n) = g(n) + h(n)."""
+        start, goal, wall_set = tuple(start_pos), tuple(goal_pos), set(walls)
+        heuristic = self.euclidean_distance if heuristic_type.lower() == 'euclidean' else self.manhattan_distance
+        frontier = [(heuristic(start, goal), 0, start, [])]
+        reached_states = set()
+
+        while frontier:
+            _, g_cost, current_pos, path_taken = heapq.heappop(frontier)
+            if current_pos in reached_states:
+                continue
+            if current_pos == goal:
+                return path_taken
+
+            reached_states.add(current_pos)
+            for action, next_position in self._successors(current_pos, wall_set, grid_size):
+                if next_position not in reached_states:
+                    new_g_cost = g_cost + 1
+                    new_h_cost = heuristic(next_position, goal)
+                    new_f_cost = new_g_cost + new_h_cost
+                    heapq.heappush(
+                        frontier,
+                        (new_f_cost, new_g_cost, next_position, path_taken + [action]),
+                    )
+
     def sense_and_act(self, percept: dict) -> str:
         """Plan to the closest visible food only when no remaining plan exists."""
         if not self.plan:
@@ -138,13 +172,16 @@ class SearchAgent:
             if not food_positions:
                 return 'Stay'
 
-            goal = min(food_positions, key=lambda food: abs(food[0] - start[0]) + abs(food[1] - start[1]))
-            search_method = {
-                'BFS': self.bfs_search,
-                'DFS': self.dfs_search,
-                'UCS': self.ucs_search,
-            }.get(self.active_algo.upper(), self.bfs_search)
-            self.plan = search_method(start, goal, percept['walls'], percept['grid_size']) or []
+            goal = min(food_positions, key=lambda food: self.manhattan_distance(start, food))
+            algorithm = self.active_algo.upper()
+            if algorithm == 'DFS':
+                self.plan = self.dfs_search(start, goal, percept['walls'], percept['grid_size']) or []
+            elif algorithm == 'UCS':
+                self.plan = self.ucs_search(start, goal, percept['walls'], percept['grid_size']) or []
+            elif algorithm == 'ASTAR':
+                self.plan = self.astar_search(start, goal, percept['walls'], percept['grid_size']) or []
+            else:
+                self.plan = self.bfs_search(start, goal, percept['walls'], percept['grid_size']) or []
 
         return self.plan.pop(0) if self.plan else 'Stay'
 
