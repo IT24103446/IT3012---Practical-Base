@@ -2,6 +2,8 @@
 import random
 import tkinter as tk
 
+from agent import ModelBasedAgent
+
 
 class VisualGridHuntGame:
     """A flexible Pacman-style grid environment with support for configurable opponents and larger scales."""
@@ -11,6 +13,7 @@ class VisualGridHuntGame:
         self.width = width
         self.height = height
         self.agent_pos = [0, 0]  # Starting position (x, y)
+        self.facing = 'Right'
 
         if custom_walls is not None:
             self.walls = set(custom_walls)
@@ -55,20 +58,29 @@ class VisualGridHuntGame:
         self.collision = False
 
     def get_percept(self) -> dict:
+        """Return only local sensor readings, never global grid coordinates."""
+        direction_offsets = {
+            'Up': (0, 1), 'Down': (0, -1), 'Left': (-1, 0), 'Right': (1, 0)
+        }
+        dx, dy = direction_offsets[self.facing]
+        cell_ahead = (self.agent_pos[0] + dx, self.agent_pos[1] + dy)
+        wall_ahead = (
+            cell_ahead[0] < 0 or cell_ahead[0] >= self.width
+            or cell_ahead[1] < 0 or cell_ahead[1] >= self.height
+            or cell_ahead in self.walls
+        )
         return {
-            'agent_pos': list(self.agent_pos),
-            'opponent_positions': [list(op) for op in self.opponents],
-            'smells_food': tuple(self.agent_pos) in self.food_positions,
+            'wall_ahead': wall_ahead,
+            'food_here': tuple(self.agent_pos) in self.food_positions,
             'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
-            'hit_wall': tuple(self.agent_pos) in self.walls,
-            'collision': self.collision,
-            'score': self.score,
-            'remaining_food': len(self.food_positions)
         }
 
     def execute_action(self, action: str):
         self.steps += 1
         new_pos = list(self.agent_pos)
+
+        if action in {'Up', 'Down', 'Left', 'Right'}:
+            self.facing = action
 
         if action == 'Up':
             new_pos[1] = min(self.height - 1, new_pos[1] + 1)
@@ -116,10 +128,11 @@ class GridGameGUI:
 
     def __init__(self, root, width=10, height=10, num_food=12, num_opponents=2, walls=None):
         self.root = root
-        self.root.title("IT3012 - Scalable Multi-Agent Grid Hunt")
+        self.root.title("IT3012 - Model-Based Grid Hunt")
 
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       custom_walls=walls)
+        self.agent = ModelBasedAgent()
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
@@ -196,7 +209,8 @@ class GridGameGUI:
 
         def step():
             if not self.env.is_done():
-                action = random.choice(['Up', 'Down', 'Left', 'Right'])
+                percept = self.env.get_percept()
+                action = self.agent.sense_and_act(percept)
                 self.env.execute_action(action)
 
                 self.draw_grid()
